@@ -1,0 +1,7 @@
+troposphere>=1.5.0
+boto3
+nose
+pylint
+common-fanatics-troposphere
+awacs
+jinja2

@@ -1,0 +1,34 @@
+machine:
+  python:
+    version: 3.4.3
+  java:
+    version: oraclejdk8
+  environment:
+    http_proxy: http://proxy-dev.frg.tech:3128
+    https_proxy: http://proxy-dev.frg.tech:3128
+    no_proxy: 127.0.0.1
+    GRADLE_OPTS: -Dhttp.proxyHost=proxy-dev.frg.tech -Dhttp.proxyPort=3128 -Dhttps.proxyHost=proxy-dev.frg.tech -Dhttps.proxyPort=3128 -Dorg.gradle.jvmargs="-Xmx2048m -XX:+HeapDumpOnOutOfMemoryError"
+    _JAVA_OPTIONS: "-Xms512m -Xmx1024m"
+    AWS_DEFAULT_REGION: us-east-1
+
+dependencies:
+  pre:
+    - echo -n buildVersion=1.0 >> gradle.properties
+    - if [ $CIRCLE_BRANCH == master ]; then echo -n "." >> gradle.properties ; else echo -n "-${CIRCLE_BRANCH}-" >> gradle.properties ; fi
+    - echo -n ${CIRCLE_BUILD_NUM} >> gradle.properties
+    - mkdir -p $HOME/.pip
+    - echo -e "[global]\nindex-url = http://repo.frg.tech/artifactory/api/pypi/pypi/simple\ntrusted-host = repo.frg.tech" > $HOME/.pip/pip.conf
+  post:
+    - pip install --upgrade common-fanatics-troposphere
+
+test:
+  override:
+    - pylint src/main/wbcmautomation
+    - mkdir -p $CIRCLE_TEST_REPORTS/nostetests
+    - cd src/main/wbcmautomation && nosetests --with-xunit --xunit-file=$CIRCLE_TEST_REPORTS/nostetests/junit.xml
+
+deployment:
+  artifactory:
+    branch: /.*/
+    commands:
+      - ./gradlew artifactoryPublish

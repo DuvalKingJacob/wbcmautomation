@@ -1,0 +1,95 @@
+apply plugin: 'distribution'
+apply plugin: 'maven-publish'
+
+group=projectGroup
+description=projectDescription
+version=buildVersion
+
+def coreFile=coreFileName
+def outFile=outFileName
+
+// troposphereBuild
+task troposphereBuild(type:Exec) {
+  workingDir './src/main'
+
+  commandLine 'python', '-m', coreFile
+  doFirst {
+    def subdir=new File(project.projectDir, "src/main/dist")
+
+    if(!subdir.exists()) {
+      subdir.mkdirs()
+    }
+
+    standardOutput=new FileOutputStream(new File(subdir, outFile))
+  }
+}
+
+// Maven Java publishing
+artifacts { archives distTar }
+publishing {
+    publications {
+        mavenStuff(MavenPublication) {
+          artifact distTar
+        }
+    }
+}
+
+// Taken from artifactory
+buildscript {
+    repositories {
+        maven {
+            url 'http://repo.frg.tech/artifactory/plugins-release'
+
+        }
+
+    }
+    dependencies {
+        //Check for the latest version here: http://plugins.gradle.org/plugin/com.jfrog.artifactory
+        classpath "org.jfrog.buildinfo:build-info-extractor-gradle:+"
+    }
+}
+
+allprojects {
+    apply plugin: "com.jfrog.artifactory"
+}
+
+artifactory {
+    contextUrl="${artifactory_contextUrl}"   //The base Artifactory URL if not overridden by the publisher/resolver
+    publish {
+        repository {
+            repoKey='libs-release-local'
+            maven=true
+            username=System.getenv("artifactory_user_id")
+            password=System.getenv("artifactory_password")
+        }
+        defaults {
+          publishArtifacts=true
+          publications ('mavenJava')
+        }
+    }
+    resolve {
+        repository {
+            repoKey='libs-release'
+            maven=true
+
+        }
+    }
+}
+
+// Additional pieces for artifactory
+artifactoryPublish.doFirst {
+  if (System.getenv("CI") == "true") {
+    clientConfig.info.setBuildNumber(System.getenv("CIRCLE_BUILD_NUM"))
+    clientConfig.info.addEnvironmentProperty('git.commit',System.getenv("CIRCLE_SHA1"))
+  }
+}
+
+// Set up dependencies
+distTar {
+  compression=Compression.GZIP
+  dependsOn troposphereBuild
+}
+artifactoryPublish {
+  publications ('mavenStuff')
+  dependsOn(troposphereBuild, distTar)
+}
